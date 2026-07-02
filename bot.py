@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import logging
@@ -103,7 +104,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not question:
         return
 
-    sheet_data = get_sheet_data()
+    try:
+        sheet_data = await asyncio.to_thread(get_sheet_data)
+    except Exception as e:
+        logging.error("Failed to fetch sheet data: %s", e)
+        await update.message.reply_text("⚠️ Could not load the knowledge base. Please try again shortly.")
+        return
 
     prompt = (
         "You are an internal operations assistant for an e-commerce moderation team.\n"
@@ -114,8 +120,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Question: {question}\nAnswer:"
     )
 
-    response = client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
-    answer = response.text.strip()
+    try:
+        response = await asyncio.to_thread(
+            client.models.generate_content, model="gemini-1.5-flash", contents=prompt
+        )
+        answer = (response.text or "").strip()
+        if not answer:
+            raise ValueError("Empty response from Gemini")
+    except Exception as e:
+        logging.error("Gemini call failed: %s", e)
+        await update.message.reply_text("⚠️ Could not generate an answer right now. Please try again.")
+        return
 
     await update.message.reply_text(answer)
 
