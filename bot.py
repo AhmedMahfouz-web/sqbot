@@ -3,13 +3,15 @@ import os
 import json
 import logging
 import threading
+import time
+from datetime import datetime
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
 import gspread
-from gspread.exceptions import APIError, SpreadsheetNotFound
+from gspread.exceptions import APIError, SpreadsheetNotFound, WorksheetNotFound
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -62,7 +64,18 @@ except Exception as e:
     raise e
 
 
+_sheet_cache = None
+_cache_expiry = 0
+CACHE_DURATION = 300  # 5 minutes in seconds
+
 def get_sheet_data() -> list[dict]:
+    global _sheet_cache, _cache_expiry
+    now = time.time()
+    if _sheet_cache is not None and now < _cache_expiry:
+        logging.info("Returning cached sheet data.")
+        return _sheet_cache
+
+    logging.info("Cache expired or empty. Fetching fresh sheet data...")
     all_rows = sheet.sheet1.get_all_values()
     if not all_rows:
         return []
@@ -90,11 +103,40 @@ def get_sheet_data() -> list[dict]:
                 record[keys[i]] = val.strip()
         records.append(record)
 
+    _sheet_cache = records
+    _cache_expiry = now + CACHE_DURATION
     return records
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("InternalOpsBot running.")
+
+
+async def refresh(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.id != GROUP_ID:
+        return
+    global _sheet_cache, _cache_expiry
+    _sheet_cache = None
+    _cache_expiry = 0
+    await update.message.reply_text("🔄 Knowledge base cache cleared. Next query will fetch fresh data.")
+
+
+def log_unresolved_question(question: str):
+    try:
+        try:
+            unresolved_ws = sheet.worksheet("Unresolved")
+        except WorksheetNotFound:
+            # Self-healing: create the worksheet if missing
+            unresolved_ws = sheet.add_worksheet(title="Unresolved", rows=100, cols=2)
+            unresolved_ws.append_row(["Timestamp", "Question"])
+            logging.info("Created 'Unresolved' worksheet.")
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        unresolved_ws.append_row([timestamp, question])
+        logging.info(f"Successfully logged unresolved question: '{question}'")
+    except Exception as e:
+        logging.error(f"Failed to log unresolved question: {e}")
+        raise e
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -141,6 +183,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ Could not generate an answer right now. Please try again.")
         return
 
+    if "I cannot find an answer in the knowledge base." in answer:
+        try:
+            await asyncio.to_thread(log_unresolved_question, question)
+            await update.message.reply_text("I cannot find an answer in the knowledge base. This question has been logged for admin review.")
+        except Exception as e:
+            logging.error("Failed to escalate unresolved question: %s", e)
+            await update.message.reply_text("I cannot find an answer in the knowledge base.")
+        return
+
     await update.message.reply_text(answer)
 
 
@@ -161,6 +212,7 @@ def run_health_server(port: int):
 def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("refresh", refresh))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     port = int(os.environ.get("PORT", 8080))
