@@ -119,8 +119,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     prompt = (
         "You are an internal operations assistant for an e-commerce moderation team.\n"
         "Answer based strictly on the knowledge base below.\n"
-        "If no entry matches, say \"I cannot find an answer in the knowledge base.\"\n"
-        "If relevant info is found, answer concisely with references.\n\n"
+        "Strict Rules:\n"
+        "1. Do NOT translate any text or values. Return the original text exactly as it is in the knowledge base (e.g. keep Arabic text in Arabic, do not translate it or append English translations in parentheses).\n"
+        "2. Present the data as a clean, easy-to-read bulleted list using the exact field names and values from the sheet.\n"
+        "3. Do NOT modify, alter, or summarize any names, phone numbers, descriptions, or values.\n"
+        "4. Do NOT attempt to update or suggest updates to the sheet.\n"
+        "If no entry matches, say \"I cannot find an answer in the knowledge base.\"\n\n"
         f"Knowledge base:\n{json.dumps(sheet_data, indent=2)}\n\n"
         f"Question: {question}\nAnswer:"
     )
