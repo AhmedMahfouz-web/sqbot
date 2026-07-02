@@ -98,6 +98,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.id != GROUP_ID:
+        logging.warning(
+            f"Ignored message from chat ID {update.effective_chat.id} because it does not match GROUP_ID {GROUP_ID}. "
+            f"To allow the bot to respond in this chat, update your GROUP_ID environment variable to {update.effective_chat.id}"
+        )
         return
 
     question = update.message.text.strip()
