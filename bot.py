@@ -17,6 +17,7 @@ TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 GROUP_ID = int(os.environ["GROUP_ID"])
 SHEET_ID = os.environ["SHEET_ID"]
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -126,7 +127,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         response = await asyncio.to_thread(
-            client.models.generate_content, model="gemini-1.5-flash", contents=prompt
+            client.models.generate_content, model=GEMINI_MODEL, contents=prompt
         )
         answer = (response.text or "").strip()
         if not answer:
