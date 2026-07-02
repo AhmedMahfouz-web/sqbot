@@ -61,7 +61,34 @@ except Exception as e:
 
 
 def get_sheet_data() -> list[dict]:
-    return sheet.sheet1.get_all_records()
+    all_rows = sheet.sheet1.get_all_values()
+    if not all_rows:
+        return []
+
+    header_idx = 0
+    # Detect if row 1 is a title banner (<= 2 non-empty columns) and row 2 has more headers
+    r1_non_empty = [val for val in all_rows[0] if val.strip()]
+    if len(r1_non_empty) <= 2 and len(all_rows) > 1:
+        r2_non_empty = [val for val in all_rows[1] if val.strip()]
+        if len(r2_non_empty) > len(r1_non_empty):
+            header_idx = 1
+
+    headers = all_rows[header_idx]
+    keys = [h.strip() if h.strip() else f"Col_{i+1}" for i, h in enumerate(headers)]
+
+    records = []
+    # Data rows start after the header row
+    for row in all_rows[header_idx + 1:]:
+        # Skip completely empty rows
+        if not any(val.strip() for val in row):
+            continue
+        record = {}
+        for i, val in enumerate(row):
+            if i < len(keys):
+                record[keys[i]] = val.strip()
+        records.append(record)
+
+    return records
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
