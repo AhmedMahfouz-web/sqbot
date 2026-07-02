@@ -8,6 +8,7 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 from google import genai
 import gspread
+from gspread.exceptions import APIError, SpreadsheetNotFound
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -18,8 +19,46 @@ SHEET_ID = os.environ["SHEET_ID"]
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-gc = gspread.service_account_from_dict(json.loads(os.environ["GOOGLE_CREDENTIALS"]))
-sheet = gc.open_by_key(SHEET_ID)
+try:
+    gc = gspread.service_account_from_dict(json.loads(os.environ["GOOGLE_CREDENTIALS"]))
+    sheet = gc.open_by_key(SHEET_ID)
+except APIError as e:
+    err_text = str(e)
+    if "must not be an Office file" in err_text or "not supported for this document" in err_text:
+        logging.error(
+            "\n"
+            "========================================================================\n"
+            "CONFIG ERROR: The SHEET_ID environment variable points to an Excel (.xlsx) file on Google Drive.\n"
+            "The Google Sheets API only works with native Google Sheets.\n"
+            "\n"
+            "To resolve this, please convert your Excel file to a Google Sheet:\n"
+            "1. Open the Excel file in Google Drive.\n"
+            "2. Click File -> Save as Google Sheets.\n"
+            "3. Copy the ID of the new Google Sheet from its URL.\n"
+            "4. Share the new Google Sheet with your service account email (found in GOOGLE_CREDENTIALS client_email).\n"
+            "5. Update your SHEET_ID environment variable in your Replit/deployment settings with the new ID.\n"
+            "========================================================================\n"
+        )
+        raise SystemExit(1)
+    else:
+        logging.error(f"API Error occurred while opening the spreadsheet: {e}")
+        raise e
+except SpreadsheetNotFound as e:
+    logging.error(
+        "\n"
+        "========================================================================\n"
+        "CONFIG ERROR: The spreadsheet with the given SHEET_ID was not found.\n"
+        "\n"
+        "Please ensure that:\n"
+        "1. The SHEET_ID environment variable is correct.\n"
+        "2. You have shared the sheet with your service account email.\n"
+        "========================================================================\n"
+    )
+    raise SystemExit(1)
+except Exception as e:
+    logging.error(f"Unexpected error loading spreadsheet: {e}")
+    raise e
+
 
 def get_sheet_data() -> list[dict]:
     return sheet.sheet1.get_all_records()
