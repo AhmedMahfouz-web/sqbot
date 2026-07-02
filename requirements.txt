@@ -1,0 +1,4 @@
+python-telegram-bot==21.10
+google-genai==1.14.0
+gspread==6.1.4
+python-dotenv==1.1.0
