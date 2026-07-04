@@ -1,4 +1,6 @@
 modules = ["python-3.12"]
+run = "python bot.py"
+
 [agent]
 expertMode = true
 
