@@ -216,9 +216,19 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     port = int(os.environ.get("PORT", 8080))
+    webhook_url = os.environ.get("WEBHOOK_URL")
+    if webhook_url:
+        path = os.environ.get("WEBHOOK_PATH", TELEGRAM_TOKEN)
+        app.run_webhook(
+            listen="0.0.0.0",
+            port=port,
+            url_path=path,
+            webhook_url=f"{webhook_url.rstrip('/')}/{path}",
+        )
+        return
+
     t = threading.Thread(target=run_health_server, args=(port,), daemon=True)
     t.start()
-
     app.run_polling()
 
 
